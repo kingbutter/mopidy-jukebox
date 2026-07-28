@@ -1,0 +1,186 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      publish_testpypi:
+        description: "Upload this build to TestPyPI"
+        type: boolean
+        default: false
+
+# Mopidy 3 and Mopidy 4 need different environments and neither runner image
+# can host both:
+#   * Mopidy 4 declares requires-python >=3.13 AND needs GStreamer >= 1.26.2.
+#   * ubuntu-latest (24.04) ships GStreamer 1.24.2, so Mopidy 4 cannot run there.
+#   * debian:trixie ships 1.26.2 -- and is the platform this actually deploys to.
+# So: Mopidy 3 on the hosted runner, Mopidy 4 in a trixie container.
+
+jobs:
+  mopidy3:
+    name: "Mopidy 3 · Python ${{ matrix.python }}"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0          # setuptools-scm derives the version from tags
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+
+      # This package only touches mopidy.ext and mopidy.config; neither pulls
+      # in GStreamer, so no system libraries are needed.
+      # Mopidy 3 imports pkg_resources, removed in setuptools 81.
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install "setuptools<81"
+          pip install -e ".[test]"
+
+      - name: Test
+        run: pytest -q --cov --cov-report=term-missing
+
+  mopidy4:
+    name: "Mopidy 4 · Debian trixie"
+    runs-on: ubuntu-latest
+    container: debian:trixie
+    steps:
+      # git must exist before checkout, otherwise the action falls back to a
+      # tarball download with no .git directory and setuptools-scm cannot
+      # derive a version.
+      - name: Install git
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends git ca-certificates
+
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Trust the workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Install dependencies
+        run: |
+          apt-get install -y -qq --no-install-recommends \
+            python3 python3-pip python3-venv python3-gi python3-gi-cairo \
+            gir1.2-glib-2.0 gir1.2-gstreamer-1.0 gir1.2-gst-plugins-base-1.0 \
+            gstreamer1.0-plugins-base
+          # --system-site-packages so the venv can see apt's python3-gi, which
+          # is not sensibly pip-installable. Same arrangement the jukebox uses.
+          python3 -m venv --system-site-packages /tmp/venv
+          /tmp/venv/bin/pip install --quiet --upgrade pip
+          /tmp/venv/bin/pip install -e ".[test]"
+
+      - name: Show what we are testing against
+        run: |
+          /tmp/venv/bin/python -c "import mopidy; print('mopidy', mopidy.__version__)"
+          gst-inspect-1.0 --version | head -2 || true
+
+      - name: Test
+        run: /tmp/venv/bin/pytest -q --cov --cov-report=term-missing
+
+  build:
+    needs: [mopidy3, mopidy4]
+    runs-on: ubuntu-latest
+    outputs:
+      # Distinguishes a real release tag from a release candidate. Without
+      # this, 'refs/tags/v...' matches v1.0.0rc1 exactly as well as v1.0.0 and
+      # a candidate goes straight to the real index.
+      prerelease: ${{ steps.classify.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install build twine trove-classifiers
+
+      # twine check does NOT validate classifiers; PyPI rejects an unknown one
+      # with a 400 at upload time, after the whole pipeline has run. Catch it
+      # here instead. (There is no "Framework :: Mopidy" classifier, however
+      # much it feels like there should be.)
+      - name: Validate classifiers
+        run: |
+          python - <<'EOF'
+          import sys, tomllib
+          from trove_classifiers import classifiers as valid
+          declared = tomllib.load(open("pyproject.toml","rb"))["project"].get("classifiers", [])
+          bad = [c for c in declared if c not in valid]
+          for c in declared:
+              print(("  ok      " if c in valid else "  INVALID ") + c)
+          if bad:
+              sys.exit(f"\nNot valid trove classifiers: {bad}")
+          EOF
+
+      - run: python -m build      # pure-python wheel; no GStreamer needed
+      - run: twine check dist/*
+
+      - name: Is this a final release tag?
+        id: classify
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" && \
+                "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(\.post[0-9]+)?$ ]]; then
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::${GITHUB_REF_NAME} is a final release -> PyPI"
+          else
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::${GITHUB_REF_NAME} is not a final release -> TestPyPI"
+          fi
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: dist
+          path: dist/
+
+  # TestPyPI on every push to main, and on demand from the Actions tab. Gives
+  # you a real 'pip install -i https://test.pypi.org/simple/' rehearsal before
+  # anything reaches the real index. Versions are 1.0.1.devN, derived from
+  # commit distance, so each push is unique; skip-existing covers re-runs.
+  publish-testpypi:
+    if: >-
+      github.ref == 'refs/heads/main' ||
+      (github.ref_type == 'tag' && needs.build.outputs.prerelease == 'true') ||
+      (github.event_name == 'workflow_dispatch' && inputs.publish_testpypi)
+    needs: build
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
+
+  publish:
+    # The real index, and ONLY for a final release tag. A candidate such as
+    # v1.0.0rc1 routes to TestPyPI instead -- PyPI never lets a version number
+    # be reused, so an accidental upload there is permanent.
+    # Trusted Publishing (OIDC) -- no API token stored anywhere.
+    if: github.ref_type == 'tag' && needs.build.outputs.prerelease == 'false' 
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1

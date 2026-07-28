@@ -1,0 +1,1221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Jukebox</title>
+<style>
+/* ═══════════════════════════════════════════════════════════════════════
+   Palette from the cabinet: Wurlitzer oxblood, marquee-bulb amber, and the
+   cream of a typed paper title strip.
+   ═══════════════════════════════════════════════════════════════════════ */
+:root{
+  --night:#150e10; --night-2:#1f1519; --night-3:#2a1d22;
+  --oxblood:#4a1622; --oxblood-lo:#33101a;
+  --amber:#f0a830; --amber-hot:#ffd166;
+  --paper:#f2e8d5; --paper-2:#e4d7bd; --ink:#2b2118;
+  --chrome:#8a9199; --chrome-lo:#565d63;
+
+  --bar-h: clamp(46px,6.4vh,64px);
+  --rail-w: clamp(122px,15vw,186px);
+  --deck-h: clamp(94px,13.5vh,132px);
+  --pad: clamp(9px,1.5vh,18px);
+
+  --display:"Liberation Sans Narrow","DejaVu Sans Condensed","Arial Narrow",
+            "Helvetica Neue Condensed",system-ui,sans-serif;
+  --typed:"DejaVu Sans Mono","Liberation Mono","Courier New",monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--night);
+  color:var(--paper);font-family:var(--display);
+  -webkit-user-select:none;user-select:none;touch-action:manipulation}
+body{display:flex;flex-direction:column}
+button{font:inherit;color:inherit;background:none;border:0}
+/* Pointer is hidden by unclutter on the kiosk, never in CSS -- otherwise the
+   page is impossible to test with a mouse. */
+
+.eyebrow{font-size:clamp(10px,1.4vh,13px);letter-spacing:.3em;
+  text-transform:uppercase;color:var(--chrome-lo)}
+
+/* ── Marquee ─────────────────────────────────────────────────────────── */
+#marquee{height:var(--bar-h);display:flex;align-items:center;gap:var(--pad);
+  padding:0 var(--pad);position:relative;flex:none;
+  background:linear-gradient(180deg,var(--oxblood),var(--oxblood-lo));
+  border-bottom:2px solid #0a0507}
+#marquee::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;
+  background:linear-gradient(90deg,transparent,var(--amber),transparent);opacity:.7}
+.bulb{width:12px;height:12px;border-radius:50%;flex:none;
+  background:var(--chrome-lo);box-shadow:inset 0 1px 2px #000}
+.bulb.on{background:var(--amber);box-shadow:0 0 13px var(--amber)}
+@media (prefers-reduced-motion:no-preference){
+  .bulb.on{animation:flicker 3.5s ease-in-out infinite}}
+@keyframes flicker{0%,100%{opacity:1}47%{opacity:.82}52%{opacity:1}}
+#mq-title{font-size:clamp(14px,1.95vh,19px);letter-spacing:.22em;font-weight:700;
+  text-transform:uppercase;color:var(--amber);flex:1;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#credits{display:flex;align-items:baseline;gap:.5em;font-size:clamp(11px,1.6vh,15px);
+  letter-spacing:.18em;color:var(--chrome);text-transform:uppercase;padding:6px}
+#credit-count{font-family:var(--typed);font-size:clamp(20px,3vh,30px);
+  font-weight:700;color:var(--amber-hot);line-height:1}
+
+/* ── Shell ───────────────────────────────────────────────────────────── */
+#shell{flex:1;display:flex;min-height:0}
+#rail{width:var(--rail-w);flex:none;display:flex;flex-direction:column;
+  background:var(--night-2);border-right:1px solid #0a0507;overflow:hidden}
+#rail-list{flex:1;overflow-y:auto;scrollbar-width:none}
+#rail-list::-webkit-scrollbar{display:none}
+.rail-btn{width:100%;min-height:clamp(52px,7.4vh,72px);
+  display:flex;align-items:center;padding:0 clamp(9px,1.2vw,16px);
+  font-size:clamp(12px,1.75vh,16px);letter-spacing:.1em;text-transform:uppercase;
+  color:var(--chrome);text-align:left;border-bottom:1px solid #0a0507;line-height:1.15}
+.rail-btn:active{background:var(--oxblood);color:var(--paper)}
+.rail-btn.sel{background:var(--night-3);color:var(--amber);
+  box-shadow:inset 4px 0 0 var(--amber)}
+#search-btn{flex:none;min-height:clamp(60px,8.6vh,84px);
+  background:linear-gradient(180deg,var(--amber-hot),var(--amber));color:var(--ink);
+  font-size:clamp(13px,1.9vh,18px);font-weight:700;letter-spacing:.16em;
+  text-transform:uppercase;box-shadow:0 -3px 0 #96601a}
+#search-btn:active{filter:brightness(.9)}
+
+#main{flex:1;min-width:0;display:flex;flex-direction:column}
+#crumb{flex:none;height:clamp(38px,5.2vh,52px);display:flex;align-items:center;
+  gap:10px;padding:0 var(--pad);border-bottom:1px solid #0a0507;background:var(--night-2)}
+#back{display:none;height:clamp(28px,3.9vh,38px);padding:0 14px;
+  border:1px solid var(--chrome-lo);color:var(--chrome);
+  font-size:clamp(10px,1.4vh,13px);letter-spacing:.14em;text-transform:uppercase}
+#back:active{background:var(--oxblood);color:var(--paper)}
+#back.on{display:block}
+#crumb-text{font-size:clamp(13px,1.9vh,18px);letter-spacing:.14em;
+  text-transform:uppercase;color:var(--paper);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+#content{flex:1;overflow-y:auto;padding:var(--pad);scrollbar-width:none;
+  -webkit-overflow-scrolling:touch}
+#content::-webkit-scrollbar{display:none}
+
+/* ── Art grid ────────────────────────────────────────────────────────── */
+.grid{display:grid;gap:var(--pad);
+  grid-template-columns:repeat(auto-fill,minmax(clamp(112px,15vw,178px),1fr))}
+.tile{display:flex;flex-direction:column;text-align:left;overflow:hidden}
+.tile .frame{width:100%;aspect-ratio:1;background:var(--night-3);
+  border:1px solid #0a0507;overflow:hidden;position:relative;
+  box-shadow:0 4px 14px rgba(0,0,0,.5)}
+.tile.round .frame{border-radius:50%}
+.tile .frame img{width:100%;height:100%;object-fit:cover;display:block}
+.tile .frame .ph{position:absolute;inset:0;display:flex;align-items:center;
+  justify-content:center;font-size:clamp(24px,4vh,40px);color:var(--chrome-lo)}
+.tile:active .frame{outline:3px solid var(--amber);outline-offset:-3px}
+.tile:active{transform:scale(.965)}
+.tile .n{font-size:clamp(11px,1.65vh,15px);font-weight:700;margin-top:7px;
+  line-height:1.2;display:-webkit-box;-webkit-line-clamp:2;
+  -webkit-box-orient:vertical;overflow:hidden}
+.tile .s{font-size:clamp(10px,1.45vh,13px);color:var(--chrome-lo);margin-top:2px;
+  letter-spacing:.05em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ── Title strips ────────────────────────────────────────────────────── */
+.strips{display:flex;flex-direction:column;gap:6px}
+.strip{min-height:clamp(56px,7.6vh,78px);display:flex;align-items:stretch;
+  background:linear-gradient(180deg,var(--paper),var(--paper-2));color:var(--ink);
+  box-shadow:0 2px 0 rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.7)}
+.strip:active{filter:brightness(.9)}
+.strip .code{flex:none;width:clamp(56px,7.2vw,80px);display:flex;
+  align-items:center;justify-content:center;font-family:var(--typed);
+  font-weight:700;font-size:clamp(13px,2vh,19px);color:var(--paper);
+  background:var(--oxblood);border-right:2px solid rgba(0,0,0,.28)}
+.strip .txt{flex:1;min-width:0;display:flex;flex-direction:column;
+  justify-content:center;padding:0 clamp(9px,1.3vw,16px);font-family:var(--typed)}
+.strip .t{font-size:clamp(12px,1.9vh,17px);font-weight:700;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.strip .a{font-size:clamp(10px,1.5vh,14px);color:#6b5d4c;margin-top:2px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.strip.playing{background:linear-gradient(180deg,var(--amber-hot),var(--amber))}
+.strip.playing .code{background:var(--ink)}
+.strip.playing .a{color:#7a5410}
+@media (prefers-reduced-motion:no-preference){
+  .strip.fresh{animation:slot .34s cubic-bezier(.2,.9,.3,1)}}
+@keyframes slot{from{transform:translateX(12%);opacity:0}to{transform:none;opacity:1}}
+
+/* ── Album / artist page header ──────────────────────────────────────── */
+.head{display:flex;gap:var(--pad);margin-bottom:var(--pad);align-items:flex-end}
+.head .frame{width:clamp(88px,13vh,150px);aspect-ratio:1;flex:none;
+  background:var(--night-3);border:1px solid #0a0507;overflow:hidden;
+  position:relative;box-shadow:0 6px 20px rgba(0,0,0,.6)}
+.head .frame img{width:100%;height:100%;object-fit:cover}
+.head .frame .ph{position:absolute;inset:0;display:flex;align-items:center;
+  justify-content:center;font-size:32px;color:var(--chrome-lo)}
+.head .meta{min-width:0;flex:1}
+.head h2{font-size:clamp(18px,3vh,32px);font-weight:700;line-height:1.1;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.head .sub{font-size:clamp(11px,1.7vh,15px);color:var(--chrome);
+  letter-spacing:.12em;text-transform:uppercase;margin-top:5px}
+.sect{margin:calc(var(--pad)*1.4) 0 calc(var(--pad)*.7)}
+
+.empty{padding:7vh var(--pad);text-align:center;color:var(--chrome-lo)}
+.empty .big{font-size:clamp(16px,2.5vh,24px);color:var(--chrome);letter-spacing:.06em}
+.empty .sub{font-size:clamp(11px,1.7vh,15px);letter-spacing:.08em;margin-top:.6em;
+  line-height:1.5;max-width:44ch;margin-left:auto;margin-right:auto}
+.spinner{padding:7vh 0;text-align:center;color:var(--chrome-lo);
+  font-family:var(--typed);letter-spacing:.2em;font-size:clamp(11px,1.7vh,14px)}
+
+/* ── Deck ────────────────────────────────────────────────────────────── */
+#deck{height:var(--deck-h);flex:none;display:flex;align-items:stretch;
+  border-top:2px solid #0a0507;background:var(--night-2)}
+#np{flex:0 0 clamp(190px,27%,330px);display:flex;align-items:center;gap:10px;
+  padding:var(--pad);border-right:1px solid #0a0507;min-width:0;position:relative}
+#np-art{width:clamp(52px,8.4vh,84px);aspect-ratio:1;flex:none;background:var(--night-3);
+  border:1px solid #0a0507;overflow:hidden;display:flex;align-items:center;
+  justify-content:center;color:var(--chrome-lo);font-size:22px;position:relative}
+#np-art img{width:100%;height:100%;object-fit:cover}
+#np-meta{min-width:0;flex:1}
+#np-title{font-size:clamp(12px,1.9vh,17px);font-weight:700;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#np-artist{font-size:clamp(10px,1.5vh,14px);color:var(--chrome);letter-spacing:.06em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+#np-clock{font-family:var(--typed);font-size:clamp(9px,1.35vh,12px);
+  color:var(--chrome-lo);margin-top:4px;letter-spacing:.08em}
+#bar{position:absolute;left:0;right:0;bottom:0;height:3px;background:#0a0507}
+#bar div{height:100%;width:0;background:var(--amber);transition:width 1s linear}
+#upnext{flex:1;min-width:0;display:flex;flex-direction:column;padding:var(--pad)}
+#upnext .eyebrow{margin-bottom:6px;flex:none}
+#queue-row{flex:1;display:flex;gap:6px;min-height:0;align-items:stretch}
+#queue-row .strip{flex:1;min-width:0;min-height:0}
+#queue-row .strip .code{width:clamp(40px,4.6vw,58px);font-size:clamp(10px,1.5vh,14px)}
+#queue-row .strip .a{display:none}
+.qmore{flex:none;display:flex;align-items:center;padding:0 12px;
+  font-family:var(--typed);font-size:clamp(10px,1.5vh,13px);color:var(--chrome-lo)}
+#queue-empty{flex:1;display:flex;align-items:center;color:var(--chrome-lo);
+  font-size:clamp(11px,1.7vh,15px);letter-spacing:.1em}
+
+/* ── Search overlay ──────────────────────────────────────────────────── */
+#search{position:absolute;inset:0;z-index:70;display:none;flex-direction:column;
+  background:var(--night);padding:var(--pad);gap:calc(var(--pad)*.7)}
+#search.on{display:flex}
+#qrow{display:flex;gap:8px;flex:none}
+#q{flex:1;min-width:0;height:clamp(48px,6.8vh,68px);background:var(--night-2);
+  border:1px solid var(--chrome-lo);padding:0 16px;display:flex;align-items:center;
+  font-family:var(--typed);font-size:clamp(15px,2.3vh,22px);
+  white-space:nowrap;overflow:hidden}
+#q .caret{width:2px;height:1.1em;background:var(--amber);margin-left:3px;flex:none}
+@media (prefers-reduced-motion:no-preference){
+  #q .caret{animation:blink 1.06s steps(1) infinite}}
+@keyframes blink{50%{opacity:0}}
+#q.ph{color:var(--chrome-lo)}
+.btn-sq{flex:none;width:clamp(66px,9vw,96px);background:var(--night-2);
+  border:1px solid var(--chrome-lo);font-size:clamp(10px,1.5vh,13px);
+  letter-spacing:.14em;text-transform:uppercase;color:var(--chrome)}
+.btn-sq:active{background:var(--oxblood);color:var(--paper)}
+#sresults{flex:1;overflow-y:auto;scrollbar-width:none}
+#sresults::-webkit-scrollbar{display:none}
+#kb{flex:none;display:flex;flex-direction:column;gap:5px}
+#kb .row{display:flex;gap:5px;justify-content:center}
+#kb button{flex:1;height:clamp(40px,5.8vh,58px);
+  background:linear-gradient(180deg,#3a2a2e,#2a1d21);border:1px solid #0a0507;
+  color:var(--paper);font-size:clamp(14px,2.1vh,20px);font-weight:700;
+  box-shadow:0 2px 0 #0a0507}
+#kb button:active{transform:translateY(2px);box-shadow:none;background:var(--oxblood)}
+#kb button.wide{flex:2.4}
+#kb button.util{color:var(--amber);font-size:clamp(11px,1.6vh,14px);letter-spacing:.1em}
+
+/* ── Chrome ──────────────────────────────────────────────────────────── */
+#status{display:none;position:absolute;left:0;right:0;top:0;z-index:95;
+  background:var(--oxblood);color:var(--paper);padding:12px clamp(14px,2vw,26px);
+  font-family:var(--typed);font-size:clamp(11px,1.7vh,15px);line-height:1.5;
+  border-bottom:2px solid var(--amber)}
+#status.on{display:block}
+#status b{color:var(--amber-hot);display:block;font-size:1.1em;margin-bottom:3px}
+#status code{background:rgba(0,0,0,.35);padding:1px 5px}
+#toast{position:absolute;left:50%;bottom:calc(var(--deck-h) + 14px);
+  transform:translate(-50%,180%);background:var(--paper);color:var(--ink);
+  padding:13px clamp(18px,3vw,32px);max-width:86%;z-index:85;
+  box-shadow:0 8px 30px rgba(0,0,0,.65);font-family:var(--typed);
+  font-size:clamp(12px,1.9vh,17px);font-weight:700;text-align:center;
+  pointer-events:none;opacity:0;visibility:hidden;
+  transition:transform .3s cubic-bezier(.2,.9,.3,1),opacity .2s}
+#toast.up{transform:translate(-50%,0);opacity:1;visibility:visible}
+#toast.bad{background:var(--oxblood);color:var(--paper)}
+#attract{position:absolute;inset:0;z-index:75;display:none;flex-direction:column;
+  align-items:center;justify-content:center;gap:3.2vh;
+  background:radial-gradient(120% 80% at 50% 40%,var(--oxblood-lo),var(--night) 70%)}
+#attract.on{display:flex}
+#attract .word{font-size:clamp(34px,8.5vh,96px);font-weight:700;letter-spacing:.14em;
+  color:var(--amber);text-transform:uppercase;line-height:.95;text-align:center}
+#attract .sub{font-size:clamp(13px,2.2vh,20px);letter-spacing:.32em;
+  color:var(--chrome);text-transform:uppercase}
+@media (prefers-reduced-motion:no-preference){
+  #attract .sub{animation:breathe 2.6s ease-in-out infinite}}
+@keyframes breathe{0%,100%{opacity:.45}50%{opacity:1}}
+#attract-art{display:grid;grid-template-columns:repeat(8,1fr);gap:5px;
+  width:min(64vw,620px);opacity:.26}
+#attract-art div{aspect-ratio:1;background-size:cover;background-position:center;
+  background-color:var(--night-3)}
+
+/* ── Pager + keypad ──────────────────────────────────────────────────── */
+.tracklist{display:flex;flex-direction:column}
+.pager{display:flex;align-items:stretch;gap:8px;margin-top:var(--pad)}
+.pgbtn{flex:none;width:clamp(64px,9vw,96px);min-height:clamp(48px,6.4vh,62px);
+  background:var(--night-3);border:1px solid var(--chrome-lo);color:var(--amber);
+  font-size:clamp(16px,2.4vh,22px)}
+.pgbtn:active{background:var(--oxblood);color:var(--paper)}
+.pglabel{flex:1;display:flex;align-items:center;justify-content:center;
+  font-family:var(--typed);font-size:clamp(11px,1.7vh,15px);letter-spacing:.16em;
+  text-transform:uppercase;color:var(--chrome);background:var(--night-2);
+  border:1px solid #0a0507}
+
+#dial{display:none;margin-left:auto;flex:none;height:clamp(28px,3.9vh,38px);
+  padding:0 14px;border:1px solid var(--amber);color:var(--amber);
+  font-size:clamp(10px,1.4vh,13px);letter-spacing:.14em;text-transform:uppercase}
+#dial.on{display:block}
+#dial:active{background:var(--amber);color:var(--ink)}
+
+#dialpad{position:fixed;inset:0;z-index:88;display:flex;align-items:center;
+  justify-content:center;background:rgba(10,5,7,.86);padding:var(--pad)}
+.dialbox{background:var(--night-2);border:2px solid var(--amber);
+  padding:clamp(14px,2.4vh,26px);max-width:min(92vw,620px);width:100%;
+  display:flex;flex-direction:column;gap:clamp(9px,1.5vh,16px)}
+.dialout{font-family:var(--typed);font-size:clamp(38px,8vh,74px);font-weight:700;
+  text-align:center;letter-spacing:.14em;color:var(--chrome-lo);
+  background:#0a0507;border:1px solid var(--chrome-lo);padding:.12em 0}
+.dialout.armed{color:var(--amber-hot)}
+.dialrow{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+.dialkey{flex:1 0 auto;min-width:clamp(46px,7vw,64px);
+  min-height:clamp(46px,6.6vh,64px);
+  background:linear-gradient(180deg,#3a2a2e,#2a1d21);border:1px solid #0a0507;
+  color:var(--paper);font-family:var(--typed);font-weight:700;
+  font-size:clamp(16px,2.6vh,24px);box-shadow:0 2px 0 #0a0507}
+.dialkey:active{transform:translateY(2px);box-shadow:none;background:var(--oxblood)}
+.dialrow.nums .dialkey{color:var(--amber)}
+.dialclose{min-height:clamp(44px,6vh,58px);background:var(--night-3);
+  border:1px solid var(--chrome-lo);color:var(--chrome);
+  font-size:clamp(11px,1.6vh,14px);letter-spacing:.16em;text-transform:uppercase}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   PHONES. The wall unit is a landscape 4:3 panel; a phone is the opposite
+   shape and already has a keyboard. Rail becomes a scrolling chip row, the
+   deck stacks, and the built-in QWERTY is swapped for a real input.
+   ═══════════════════════════════════════════════════════════════════════ */
+@media (orientation:portrait), (max-width:700px){
+  :root{ --deck-h:auto; --pad:11px; }
+
+  #shell{flex-direction:column}
+
+  #rail{width:100%;flex-direction:row;align-items:stretch;
+    border-right:0;border-bottom:1px solid #0a0507}
+  #rail-list{display:flex;flex-direction:row;overflow-x:auto;overflow-y:hidden;
+    -webkit-overflow-scrolling:touch}
+  .rail-btn{width:auto;min-height:50px;white-space:nowrap;flex:none;
+    padding:0 18px;border-bottom:0;border-right:1px solid #0a0507;
+    font-size:13px;letter-spacing:.08em}
+  .rail-btn.sel{box-shadow:inset 0 -3px 0 var(--amber)}
+  #search-btn{min-height:0;width:auto;flex:none;padding:0 22px;
+    box-shadow:none;border-left:2px solid #0a0507;font-size:13px}
+
+  .grid{grid-template-columns:repeat(auto-fill,minmax(min(30vw,124px),1fr));gap:11px}
+  .tile .n{font-size:13px}
+  .tile .s{font-size:11px}
+  .strip{min-height:60px}
+  .strip .t{font-size:14px}
+  .strip .a{font-size:12px}
+  .head .frame{width:96px}
+  .head h2{font-size:22px}
+
+  /* Deck: one compact line for now-playing, one for the queue. */
+  #deck{flex-direction:column;height:auto}
+  #np{flex:none;border-right:0;border-bottom:1px solid #0a0507;padding:10px var(--pad)}
+  #np-art{width:46px}
+  #np-title{font-size:14px} #np-artist{font-size:12px} #np-clock{font-size:11px}
+  #upnext{padding:9px var(--pad) 11px}
+  #upnext .eyebrow{font-size:10px;margin-bottom:5px}
+  #queue-row{gap:5px}
+  #queue-row .strip{min-height:42px}
+  #queue-row .strip .code{width:44px;font-size:11px}
+  #queue-row .strip .t{font-size:12px}
+  #queue-empty{font-size:12px}
+
+  /* The phone's own keyboard replaces ours. */
+  .pgbtn{width:70px;min-height:46px}
+  .pglabel{font-size:11px}
+  #dial{font-size:11px;padding:0 10px}
+  .dialout{font-size:44px}
+  .dialkey{min-width:44px;min-height:46px;font-size:18px}
+  #kb{display:none}
+  #q{display:none}
+  #qinput{display:block}
+  #search{gap:9px}
+
+  #toast{bottom:auto;top:12px;transform:translate(-50%,-180%)}
+  #toast.up{transform:translate(-50%,0)}
+
+  #attract .word{font-size:clamp(28px,7vw,44px)}
+  #attract-art{grid-template-columns:repeat(4,1fr);width:76vw}
+}
+
+/* Real text input, only used on phones (see media query above). */
+#qinput{display:none;flex:1;min-width:0;height:52px;background:var(--night-2);
+  border:1px solid var(--chrome-lo);color:var(--paper);padding:0 14px;
+  font-family:var(--typed);font-size:17px;border-radius:0;-webkit-appearance:none}
+#qinput::placeholder{color:var(--chrome-lo)}
+#qinput:focus{outline:2px solid var(--amber);outline-offset:-2px}
+</style>
+</head>
+<body>
+
+<div id="marquee">
+  <div class="bulb" id="bulb"></div>
+  <div id="mq-title">Jukebox</div>
+  <div id="credits"><span>Credits</span><span id="credit-count">0</span></div>
+</div>
+
+<div id="shell">
+  <nav id="rail">
+    <div id="rail-list"></div>
+    <button id="search-btn">Search</button>
+  </nav>
+  <div id="main">
+    <div id="crumb">
+      <button id="back">◀ Back</button>
+      <div id="crumb-text">Browse</div>
+      <button id="dial">⌨ Dial a code</button>
+    </div>
+    <div id="content"><div class="spinner">Loading…</div></div>
+  </div>
+</div>
+
+<div id="deck">
+  <div id="np">
+    <div id="np-art">♪</div>
+    <div id="np-meta">
+      <div id="np-title">Nothing playing</div>
+      <div id="np-artist">Pick something</div>
+      <div id="np-clock">—:— / —:—</div>
+    </div>
+    <div id="bar"><div></div></div>
+  </div>
+  <div id="upnext">
+    <div class="eyebrow">Coming up</div>
+    <div id="queue-row"></div>
+    <div id="queue-empty">Nothing queued — yours plays next</div>
+  </div>
+</div>
+
+<div id="search">
+  <div id="qrow">
+    <div id="q" class="ph"><span id="qtext">Song, artist or album</span><span class="caret"></span></div>
+    <input id="qinput" type="search" autocomplete="off" autocorrect="off"
+           autocapitalize="none" spellcheck="false" placeholder="Song, artist or album">
+    <button class="btn-sq" id="clear">Clear</button>
+    <button class="btn-sq" id="sclose">Done</button>
+  </div>
+  <div id="sresults"></div>
+  <div id="kb"></div>
+</div>
+
+<div id="status"></div>
+<div id="toast"></div>
+<div id="attract">
+  <div class="word">Touch to<br>play something</div>
+  <div id="attract-art"></div>
+  <div class="sub">Free plays all night</div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════════
+   CONFIG — tune for the room, reload the page, no rebuild.
+   ═══════════════════════════════════════════════════════════════════════ */
+const CFG = {
+  // Served by Mopidy itself (Mopidy-Jukebox extension) the page and the RPC
+  // endpoint share an origin, so there is no CORS to configure. Served from
+  // anywhere else, fall back to :6680 on the same host.
+  mopidy:        location.port === '6680'
+                   ? location.host
+                   : (location.hostname || 'localhost') + ':6680',
+  searchUris:    [],             // [] = all backends (Spotify + local files)
+  startCredits:  4,
+  refillEvery:   10 * 60 * 1000,
+  maxCredits:    8,
+  costPerSong:   1,
+  attractAfter:  90 * 1000,
+  queueInDeck:   4,
+  pageSize:      10,            // rows per bank: A1..A10, then B1..B10
+  gridCap:       60,             // tiles per page; keeps the UP Squared happy
+  title:         'Jukebox',
+};
+
+/* ── RPC ──────────────────────────────────────────────────────────────── */
+let rpcId = 0;
+async function rpc(method, params = {}) {
+  const res = await fetch(`http://${CFG.mopidy}/mopidy/rpc`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({jsonrpc: '2.0', id: ++rpcId, method, params}),
+  });
+  if (!res.ok) throw new Error(`${method} → HTTP ${res.status}`);
+  const j = await res.json();
+  if (j.error) throw new Error(`${method} → ${j.error.message}`);
+  return j.result;
+}
+
+/* ── State ────────────────────────────────────────────────────────────── */
+const S = {
+  credits: CFG.startCredits,
+  current: null, queue: [], state: 'stopped', pos: 0, len: 0,
+  roots: [], railSel: null,
+  nav: [],
+  query: '', lastTouch: Date.now(),
+  list: {tracks: [], page: 0},   // the currently dialable track list
+  art: new Map(), artWanted: new Map(),
+};
+
+const $  = s => document.querySelector(s);
+const el = (t, c, txt) => { const e = document.createElement(t);
+  if (c) e.className = c; if (txt != null) e.textContent = txt; return e; };
+const fmt = ms => { if (ms == null) return '—:—';
+  const t = Math.floor(ms / 1000);
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; };
+const artistOf = tr => (tr?.artists || []).map(a => a.name).join(', ') || '';
+
+/* ── Tap, not touch ───────────────────────────────────────────────────────
+   pointerdown fires the moment a finger lands, so using it for activation
+   means starting a scroll queues whatever was under your finger. Fire on
+   pointerup instead, and only if the finger barely moved and didn't linger.
+   Buttons that never sit inside a scroller (keyboard keys) keep using
+   pointerdown, because there the instant response feels better. */
+const TAP_SLOP_PX = 12;
+const TAP_MAX_MS  = 800;
+function onTap(node, fn) {
+  let sx = 0, sy = 0, st = 0, dead = false, id = null;
+  node.addEventListener('pointerdown', e => {
+    id = e.pointerId; sx = e.clientX; sy = e.clientY; st = Date.now(); dead = false;
+  });
+  node.addEventListener('pointermove', e => {
+    if (e.pointerId !== id || dead) return;
+    if (Math.hypot(e.clientX - sx, e.clientY - sy) > TAP_SLOP_PX) dead = true;
+  });
+  node.addEventListener('pointercancel', () => { dead = true; });
+  node.addEventListener('pointerup', e => {
+    if (e.pointerId !== id || dead) return;
+    if (Date.now() - st > TAP_MAX_MS) return;
+    if (Math.hypot(e.clientX - sx, e.clientY - sy) > TAP_SLOP_PX) return;
+    fn(e);
+  });
+}
+
+/* ── Artwork: batched, deduped, lazy ──────────────────────────────────── */
+/* get_images takes many URIs at once, so a 60-tile grid becomes one or two
+   round trips rather than sixty. */
+let artTimer;
+function wantArt(uri, node) {
+  if (!uri || !node) return;
+  if (S.art.has(uri)) { paintArt(node, S.art.get(uri)); return; }
+  if (!S.artWanted.has(uri)) S.artWanted.set(uri, []);
+  S.artWanted.get(uri).push(node);
+  clearTimeout(artTimer);
+  artTimer = setTimeout(flushArt, 90);
+}
+async function flushArt() {
+  const uris = [...S.artWanted.keys()].filter(u => !S.art.has(u));
+  if (!uris.length) return;
+  for (let i = 0; i < uris.length; i += 40) {
+    const batch = uris.slice(i, i + 40);
+    try {
+      const imgs = await rpc('core.library.get_images', {uris: batch});
+      batch.forEach(u => {
+        const list = imgs?.[u] || [];
+        // Aim for ~320px: sharp enough for a tile, quick to decode.
+        const pick = list.slice().sort((a, b) =>
+          Math.abs((a.width || 640) - 320) - Math.abs((b.width || 640) - 320))[0];
+        S.art.set(u, pick?.uri || null);
+      });
+    } catch { batch.forEach(u => S.art.set(u, null)); }
+    batch.forEach(u => {
+      (S.artWanted.get(u) || []).forEach(n => paintArt(n, S.art.get(u)));
+      S.artWanted.delete(u);
+    });
+  }
+}
+function paintArt(node, url) {
+  if (!node || !node.isConnected || !url) return;   // no art: keep the glyph
+  const img = new Image();
+  img.alt = '';
+  img.onload = () => { if (node.isConnected) { node.innerHTML = ''; node.appendChild(img); } };
+  img.src = url;
+}
+
+/* ── Builders ─────────────────────────────────────────────────────────── */
+/* Selection codes. In LISTS these are positional -- bank letter from the page,
+   number from the row -- exactly like the physical machines, where the code
+   named the slot rather than the record. That is what makes them dialable.
+   In the QUEUE we show position instead, since "you are #3" is the useful
+   fact there and a track shouldn't wear two different codes. */
+const BANKS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+const bankCode = (page, row) => `${BANKS[page % BANKS.length]}${row + 1}`;
+
+function tile(ref, {round = false, sub = ''} = {}) {
+  const b = el('button', 'tile' + (round ? ' round' : ''));
+  const frame = el('div', 'frame');
+  frame.appendChild(el('div', 'ph', round ? '☻' : '♪'));
+  b.appendChild(frame);
+  b.appendChild(el('div', 'n', ref.name || 'Unknown'));
+  if (sub) b.appendChild(el('div', 's', sub));
+  wantArt(ref.uri, frame);
+  onTap(b, () => openRef(ref));
+  return b;
+}
+function stripEl(track, {code, playing, onTap: tapFn} = {}) {
+  const e = el('div', 'strip' + (playing ? ' playing' : ''));
+  e.appendChild(el('div', 'code', code ?? '♪'));
+  const txt = el('div', 'txt');
+  txt.appendChild(el('div', 't', track.name || 'Unknown'));
+  txt.appendChild(el('div', 'a', artistOf(track) || ' '));
+  e.appendChild(txt);
+  if (tapFn) onTap(e, () => tapFn(track));
+  return e;
+}
+function gridOf(refs, opts) {
+  const g = el('div', 'grid');
+  refs.slice(0, CFG.gridCap).forEach(r => g.appendChild(tile(r, opts)));
+  return g;
+}
+function notice(big, sub) {
+  const e = el('div', 'empty');
+  e.appendChild(el('div', 'big', big));
+  if (sub) e.appendChild(el('div', 'sub', sub));
+  return e;
+}
+
+/* ── Paged, dialable track list ───────────────────────────────────────────
+   One bank per page: A1..A10, then B1..B10. Page with the arrows, a swipe,
+   or by dialling the code on the keypad. */
+function renderTrackList(tracks, container) {
+  S.list = {tracks, page: 0};
+  const wrap = el('div', 'tracklist');
+  const strips = el('div', 'strips'); strips.id = 'tl-strips';
+  const pager  = el('div', 'pager');  pager.id  = 'tl-pager';
+  wrap.appendChild(strips); wrap.appendChild(pager);
+  container.appendChild(wrap);
+  paintTrackList();
+}
+
+function listPages() {
+  return Math.max(1, Math.ceil(S.list.tracks.length / CFG.pageSize));
+}
+
+function paintTrackList() {
+  const strips = document.getElementById('tl-strips');
+  const pager  = document.getElementById('tl-pager');
+  if (!strips) return;
+  const per = CFG.pageSize, pages = listPages();
+  const p = Math.max(0, Math.min(S.list.page, pages - 1));
+  S.list.page = p;
+
+  strips.innerHTML = '';
+  S.list.tracks.slice(p * per, p * per + per).forEach((t, i) => {
+    strips.appendChild(stripEl(t, {code: bankCode(p, i), onTap: queueTrack}));
+  });
+
+  pager.innerHTML = '';
+  if (pages > 1) {
+    const prev = el('button', 'pgbtn', '◀');
+    const next = el('button', 'pgbtn', '▶');
+    const lbl  = el('div', 'pglabel', `Bank ${BANKS[p]} · ${p + 1} of ${pages}`);
+    onTap(prev, () => { S.list.page = (p - 1 + pages) % pages; paintTrackList(); });
+    onTap(next, () => { S.list.page = (p + 1) % pages; paintTrackList(); });
+    pager.appendChild(prev); pager.appendChild(lbl); pager.appendChild(next);
+  }
+  $('#dial').classList.toggle('on', S.list.tracks.length > 0);
+}
+
+function pageBy(step) {
+  const pages = listPages();
+  if (pages < 2) return;
+  S.list.page = (S.list.page + step + pages) % pages;
+  paintTrackList();
+}
+
+/* ── Keypad ───────────────────────────────────────────────────────────────
+   The codes only earn their place if you can punch them in. Pick a bank
+   letter, then a number, and it queues -- no scrolling at all. */
+function openDial() {
+  if (!S.list.tracks.length) { toast('Nothing to dial here', true); return; }
+  if (document.getElementById('dialpad')) return;
+
+  const pages = listPages();
+  const pad = el('div'); pad.id = 'dialpad';
+  const inner = el('div', 'dialbox');
+
+  const readout = el('div', 'dialout');
+  const setOut = () => {
+    readout.textContent = (dialLetter || '_') + (dialNumber || '_');
+    readout.classList.toggle('armed', !!dialLetter);
+  };
+  let dialLetter = '', dialNumber = '';
+
+  inner.appendChild(el('div', 'eyebrow', 'Make a selection'));
+  inner.appendChild(readout);
+
+  const letters = el('div', 'dialrow');
+  for (let i = 0; i < pages; i++) {
+    const b = el('button', 'dialkey', BANKS[i]);
+    onTap(b, () => { dialLetter = BANKS[i]; dialNumber = ''; setOut(); });
+    letters.appendChild(b);
+  }
+  inner.appendChild(letters);
+
+  const nums = el('div', 'dialrow nums');
+  for (let n = 1; n <= CFG.pageSize; n++) {
+    const b = el('button', 'dialkey', String(n));
+    onTap(b, () => {
+      if (!dialLetter) { toast('Pick a bank letter first', true); return; }
+      dialNumber = String(n); setOut();
+      const page = BANKS.indexOf(dialLetter);
+      const track = S.list.tracks[page * CFG.pageSize + (n - 1)];
+      if (!track) { toast(`${dialLetter}${n} is empty`, true); dialNumber = ''; setOut(); return; }
+      queueTrack(track);
+      pad.remove();
+    });
+    nums.appendChild(b);
+  }
+  inner.appendChild(nums);
+
+  const close = el('button', 'dialclose', 'Cancel');
+  onTap(close, () => pad.remove());
+  inner.appendChild(close);
+
+  setOut();
+  pad.appendChild(inner);
+  onTap(pad, e => { if (e.target === pad) pad.remove(); });
+  document.body.appendChild(pad);
+}
+
+/* ── Navigation ───────────────────────────────────────────────────────── */
+function openRef(ref) {
+  if (ref.type === 'track') { queueTrack(ref); return; }
+  // Album/artist pages render into #content, which sits BEHIND the search
+  // overlay. Navigating without closing looks like nothing happened.
+  const cameFromSearch = $('#search').classList.contains('on');
+  if (cameFromSearch) closeSearch();
+  S.nav.push(cameFromSearch ? {...ref, _fromSearch: true} : ref);
+  renderPage();
+}
+
+function navBack() {
+  const leaving = S.nav.pop();
+  renderPage();
+  // If this page was opened from a search result, Back belongs to the
+  // results, not to whichever rail category happened to be underneath.
+  if (leaving && leaving._fromSearch && S.query) openSearch();
+}
+function navRoot(ref) { S.nav = [ref]; S.railSel = ref.uri; paintRail(); renderPage(); }
+
+async function renderPage() {
+  const c = $('#content');
+  const here = S.nav[S.nav.length - 1];
+  $('#back').classList.toggle('on', S.nav.length > 1);
+  $('#crumb-text').textContent = here ? here.name : 'Browse';
+  if (!here) { c.innerHTML = ''; return; }
+  S.list = {tracks: [], page: 0};
+  $('#dial').classList.remove('on');
+  c.innerHTML = '<div class="spinner">Loading…</div>';
+  try {
+    if (here.type === 'artist')     await renderArtist(here, c);
+    else if (here.type === 'album') await renderAlbum(here, c);
+    else                            await renderBrowse(here, c);
+  } catch (e) {
+    console.error(e);
+    c.innerHTML = '';
+    c.appendChild(notice("Couldn't load that", String(e.message || e)));
+  }
+}
+
+async function renderBrowse(ref, c) {
+  const items = await rpc('core.library.browse', {uri: ref.uri || null});
+  c.innerHTML = '';
+  if (!items.length) {
+    c.appendChild(notice('Nothing here', 'Try another category, or search.'));
+    return;
+  }
+  const tracks = items.filter(i => i.type === 'track');
+  const rest   = items.filter(i => i.type !== 'track');
+  if (rest.length) c.appendChild(gridOf(rest, {round: rest[0].type === 'artist'}));
+  if (tracks.length) {
+    if (rest.length) c.appendChild(el('div', 'eyebrow sect', 'Tracks'));
+    // browse() returns light refs; look them up so strips show artist + length.
+    let list = tracks;
+    try {
+      const full = await rpc('core.library.lookup',
+        {uris: tracks.slice(0, 60).map(t => t.uri)});
+      const flat = Object.values(full).flat();
+      if (flat.length) list = flat;
+    } catch {}
+    renderTrackList(list, c);
+  }
+}
+
+async function renderAlbum(ref, c) {
+  const res = await rpc('core.library.lookup', {uris: [ref.uri]});
+  const tracks = Object.values(res).flat();
+  c.innerHTML = '';
+  const head = el('div', 'head');
+  const frame = el('div', 'frame');
+  frame.appendChild(el('div', 'ph', '♪'));
+  wantArt(ref.uri, frame);
+  head.appendChild(frame);
+  const meta = el('div', 'meta');
+  meta.appendChild(el('h2', null, ref.name));
+  meta.appendChild(el('div', 'sub',
+    [artistOf(tracks[0]), tracks.length ? `${tracks.length} tracks` : '']
+      .filter(Boolean).join(' · ')));
+  head.appendChild(meta);
+  c.appendChild(head);
+  if (!tracks.length) { c.appendChild(notice('No tracks in this album')); return; }
+  renderTrackList(tracks, c);
+}
+
+async function renderArtist(ref, c) {
+  const [top, sub] = await Promise.all([
+    rpc('core.library.lookup', {uris: [ref.uri]}).catch(() => ({})),
+    rpc('core.library.browse', {uri: ref.uri}).catch(() => []),
+  ]);
+  const tracks = Object.values(top).flat();
+  c.innerHTML = '';
+  const head = el('div', 'head');
+  const frame = el('div', 'frame');
+  frame.appendChild(el('div', 'ph', '☻'));
+  wantArt(ref.uri, frame);
+  head.appendChild(frame);
+  const meta = el('div', 'meta');
+  meta.appendChild(el('h2', null, ref.name));
+  meta.appendChild(el('div', 'sub', 'Artist'));
+  head.appendChild(meta);
+  c.appendChild(head);
+
+  if (tracks.length) {
+    c.appendChild(el('div', 'eyebrow sect', 'Popular'));
+    renderTrackList(tracks.slice(0, 30), c);
+  }
+  const albums = sub.filter(r => r.type === 'album' || r.type === 'directory');
+  if (albums.length) {
+    c.appendChild(el('div', 'eyebrow sect', 'Albums'));
+    c.appendChild(gridOf(albums));
+  }
+  if (!tracks.length && !albums.length) c.appendChild(notice('Nothing available for this artist'));
+}
+
+/* ── Rail ─────────────────────────────────────────────────────────────── */
+function paintRail() {
+  const list = $('#rail-list');
+  list.innerHTML = '';
+  S.roots.forEach(r => {
+    const b = el('button', 'rail-btn' + (S.railSel === r.uri ? ' sel' : ''), r.name);
+    onTap(b, () => navRoot(r));
+    list.appendChild(b);
+  });
+}
+async function loadRail() {
+  let roots = [];
+  try { roots = await rpc('core.library.browse', {uri: null}); }
+  catch (e) { console.error('browse root failed', e); }
+  // Playlists live outside the browse tree.
+  try {
+    const pls = await rpc('core.playlists.as_list');
+    if (pls?.length) roots = roots.concat(
+      pls.slice(0, 14).map(p => ({name: p.name, uri: p.uri, type: 'directory'})));
+  } catch {}
+  S.roots = roots;
+  paintRail();
+  if (roots.length) navRoot(roots[0]);
+  else {
+    $('#content').innerHTML = '';
+    $('#content').appendChild(notice('Nothing to browse yet',
+      'Your playlists and albums appear here once Spotify is authorised. Search works either way.'));
+  }
+}
+
+/* ── Queue / playback ─────────────────────────────────────────────────── */
+let toastTimer;
+function toast(msg, bad = false) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.className = 'up' + (bad ? ' bad' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = bad ? 'bad' : ''; }, 2600);
+}
+async function queueTrack(tr) {
+  if (S.credits < CFG.costPerSong) { toast('Out of credits — more in a few minutes', true); return; }
+  try {
+    await rpc('core.tracklist.add', {uris: [tr.uri]});
+    S.credits -= CFG.costPerSong; renderCredits();
+    await refresh();
+    if (S.state !== 'playing') { try { await rpc('core.playback.play'); } catch {} }
+    const place = S.queue.findIndex(q => q.track.uri === tr.uri) + 1;
+    const wait = S.queue.slice(0, Math.max(place - 1, 0))
+                        .reduce((n, q) => n + (q.track.length || 0), 0)
+                 + Math.max((S.len || 0) - (S.pos || 0), 0);
+    toast(place > 0
+      ? `Queued — #${place} in line, about ${Math.max(1, Math.round(wait / 60000))} min`
+      : 'Queued');
+    if ($('#search').classList.contains('on')) closeSearch();
+  } catch (e) { console.error(e); toast('Could not queue that one', true); }
+}
+function renderCredits() { $('#credit-count').textContent = S.credits; }
+
+function renderDeck() {
+  const tr = S.current?.track;
+  $('#np-title').textContent  = tr ? tr.name : 'Nothing playing';
+  $('#np-artist').textContent = tr ? (artistOf(tr) || '—') : 'Pick something';
+  $('#np-clock').textContent  = `${fmt(S.pos)} / ${fmt(S.len)}`;
+  $('#bulb').className = 'bulb' + (S.state === 'playing' ? ' on' : '');
+  $('#bar').firstElementChild.style.width = S.len ? `${(S.pos / S.len) * 100}%` : '0';
+  const a = $('#np-art');
+  if (tr) { if (a.dataset.uri !== tr.uri) { a.dataset.uri = tr.uri; a.textContent = '♪'; wantArt(tr.uri, a); } }
+  else { a.dataset.uri = ''; a.textContent = '♪'; }
+
+  const row = $('#queue-row');
+  row.innerHTML = '';
+  const shown = S.queue.slice(0, CFG.queueInDeck);
+  $('#queue-empty').style.display = shown.length ? 'none' : 'flex';
+  row.style.display = shown.length ? 'flex' : 'none';
+  shown.forEach((tl, i) => row.appendChild(stripEl(tl.track, {code: '#' + (i + 1)})));
+  const extra = S.queue.length - shown.length;
+  if (extra > 0) row.appendChild(el('div', 'qmore', `+${extra}`));
+}
+
+function setStatus(html) {
+  const s = $('#status');
+  if (!html) { s.classList.remove('on'); s.innerHTML = ''; return; }
+  s.innerHTML = html; s.classList.add('on');
+}
+function diagnose(err) {
+  if (location.protocol === 'file:')
+    return `<b>Opened as a local file</b>
+      Mopidy rejects <code>file://</code> origins. Serve it over HTTP:
+      <code>systemctl start jukebox-ui</code>, then <code>http://localhost:8080/</code>`;
+  return `<b>Can't reach Mopidy at ${CFG.mopidy}</b>
+    Check <code>systemctl status mopidy</code>. If it is running, add
+    <code>${location.host}</code> to <code>allowed_origins</code> under
+    <code>[http]</code> in <code>/etc/mopidy/mopidy.conf</code> and restart it.
+    <br><span style="opacity:.75">${String(err?.message || err)}</span>`;
+}
+/* Mopidy's tracklist is a playlist, not a queue -- by default it keeps every
+   track forever, so played songs pile up behind the current one and reappear
+   in full the moment playback stops. Consume mode is the jukebox semantic:
+   a track is removed once it has been played. Re-asserted on every refresh so
+   it survives a Mopidy restart without needing the page reloaded. */
+async function ensureConsume(isOn) {
+  if (isOn) return;
+  try {
+    await rpc('core.tracklist.set_consume', {value: true});
+    log_once('consume mode enabled');
+  } catch (e) { console.error('could not set consume mode', e); }
+}
+let _logged = {};
+function log_once(msg) { if (!_logged[msg]) { _logged[msg] = 1; console.log(msg); } }
+
+async function refresh() {
+  try {
+    const [state, cur, tls, consume] = await Promise.all([
+      rpc('core.playback.get_state'),
+      rpc('core.playback.get_current_tl_track'),
+      rpc('core.tracklist.get_tl_tracks'),
+      rpc('core.tracklist.get_consume').catch(() => true),
+    ]);
+    setStatus(null);
+    ensureConsume(consume);
+    S.state = state; S.current = cur; S.len = cur?.track?.length || 0;
+    const i = cur ? tls.findIndex(t => t.tlid === cur.tlid) : -1;
+    // With consume on, anything before the current track is already gone, so
+    // slicing past it is exact. When nothing is playing the whole tracklist
+    // is genuinely still-to-play.
+    S.queue = i >= 0 ? tls.slice(i + 1) : tls;
+    renderDeck();
+  } catch (e) { console.error('refresh failed', e); setStatus(diagnose(e)); }
+}
+
+/* ── Search ───────────────────────────────────────────────────────────── */
+/* Phones get their own keyboard; the kiosk gets ours. One query, two ways
+   in, so the rest of the search code doesn't care which was used. */
+const phoneLayout = () =>
+  matchMedia('(orientation:portrait), (max-width:700px)').matches;
+
+function openSearch() {
+  $('#search').classList.add('on');
+  const box = $('#sresults');
+  // Reopening restores the last search rather than wiping it. Queue a song,
+  // land back on browse, hit Search again -- your results are still there.
+  if (S.query) {
+    paintQuery();
+    doSearch();
+  } else {
+    box.innerHTML = '';
+    box.appendChild(notice('Start typing'));
+    paintQuery();
+  }
+  if (phoneLayout()) {
+    const inp = $('#qinput');
+    inp.value = S.query;
+    // A tick's delay, otherwise iOS ignores focus on a just-shown element.
+    setTimeout(() => { inp.focus(); inp.select(); }, 60);
+  }
+}
+function closeSearch() {
+  $('#search').classList.remove('on');
+  const inp = $('#qinput');
+  if (inp) inp.blur();
+}
+
+let searchSeq = 0;
+async function doSearch() {
+  const q = S.query.trim();
+  const box = $('#sresults');
+  if (q.length < 2) { box.innerHTML = ''; box.appendChild(notice('Start typing')); return; }
+  const mine = ++searchSeq;
+  try {
+    const params = {query: {any: [q]}};
+    if (CFG.searchUris.length) params.uris = CFG.searchUris;
+    const res = await rpc('core.library.search', params);
+    if (mine !== searchSeq) return;               // a newer keystroke won
+    const dedupe = a => { const s = new Set(); return a.filter(x => x && !s.has(x.uri) && s.add(x.uri)); };
+    const tracks  = dedupe(res.flatMap(r => r.tracks  || []));
+    const albums  = dedupe(res.flatMap(r => r.albums  || []));
+    const artists = dedupe(res.flatMap(r => r.artists || []));
+    box.innerHTML = '';
+    if (!tracks.length && !albums.length && !artists.length) {
+      box.appendChild(notice(`Nothing found for “${q}”`, 'Check the spelling, or try just the artist.'));
+      return;
+    }
+    if (artists.length) {
+      box.appendChild(el('div', 'eyebrow sect', 'Artists'));
+      box.appendChild(gridOf(artists.slice(0, 8).map(a => ({...a, type: 'artist'})), {round: true}));
+    }
+    if (albums.length) {
+      box.appendChild(el('div', 'eyebrow sect', 'Albums'));
+      box.appendChild(gridOf(albums.slice(0, 12).map(a => ({...a, type: 'album'}))));
+    }
+    if (tracks.length) {
+      box.appendChild(el('div', 'eyebrow sect', 'Songs'));
+      renderTrackList(tracks.slice(0, 40), box);
+    }
+  } catch (e) {
+    if (mine !== searchSeq) return;
+    console.error(e);
+    box.innerHTML = ''; box.appendChild(notice('Search is unavailable right now'));
+  }
+}
+
+const ROWS = ['QWERTYUIOP', 'ASDFGHJKL', 'ZXCVBNM'];
+function buildKeyboard() {
+  const kb = $('#kb');
+  ROWS.forEach(r => {
+    const row = el('div', 'row');
+    [...r].forEach(ch => {
+      const b = el('button', null, ch);
+      b.addEventListener('pointerdown', e => { e.preventDefault(); type(ch); });
+      row.appendChild(b);
+    });
+    kb.appendChild(row);
+  });
+  const row = el('div', 'row');
+  const mk = (label, cls, fn) => { const b = el('button', cls, label);
+    b.addEventListener('pointerdown', e => { e.preventDefault(); fn(); }); return b; };
+  row.appendChild(mk('Delete', 'util wide', () => { S.query = S.query.slice(0, -1); afterType(); }));
+  row.appendChild(mk('Space', 'wide', () => type(' ')));
+  row.appendChild(mk("'", null, () => type("'")));
+  kb.appendChild(row);
+}
+let typeTimer;
+function type(c) { S.query += c; afterType(); }
+function afterType() { paintQuery(); clearTimeout(typeTimer); typeTimer = setTimeout(doSearch, 380); }
+function paintQuery() {
+  const q = $('#q'), t = $('#qtext'), inp = $('#qinput');
+  if (S.query) { t.textContent = S.query; q.classList.remove('ph'); }
+  else { t.textContent = 'Song, artist or album'; q.classList.add('ph'); }
+  if (inp && inp.value !== S.query) inp.value = S.query;
+}
+
+/* ── Admin override: five taps on the credits counter ─────────────────── */
+/* Guests get no transport controls on purpose -- nobody should be able to
+   skip someone else's song. This is the staff key behind the coin door. */
+let tapCount = 0, tapTimer;
+$('#credits').addEventListener('pointerdown', () => {
+  clearTimeout(tapTimer);
+  if (++tapCount >= 5) { tapCount = 0; toggleAdmin(); return; }
+  tapTimer = setTimeout(() => { tapCount = 0; }, 1200);
+});
+
+async function getVolume() {
+  try { return await rpc('core.mixer.get_volume'); } catch { return null; }
+}
+
+function toggleAdmin() {
+  const existing = document.getElementById('admin');
+  if (existing) { existing.remove(); return; }
+
+  const bar = el('div'); bar.id = 'admin';
+  bar.style.cssText = `position:absolute;left:0;right:0;bottom:0;z-index:90;
+    display:flex;flex-direction:column;gap:7px;padding:9px;background:#0a0507;
+    border-top:2px solid var(--amber)`;
+
+  const mkRow = () => { const r = el('div');
+    r.style.cssText = 'display:flex;gap:7px'; return r; };
+  const mk = (label, fn, flex = 1) => {
+    const b = el('button', null, label);
+    b.style.cssText = `flex:${flex};min-height:56px;background:var(--oxblood);
+      color:var(--paper);font-size:13px;letter-spacing:.1em;text-transform:uppercase;
+      border:1px solid var(--amber);padding:0 6px`;
+    b.addEventListener('pointerdown', async e => {
+      e.stopPropagation();
+      try { await fn(b); await refresh(); } catch (err) { console.error(err); toast('Failed', true); }
+    });
+    return b;
+  };
+
+  // ── transport ──
+  const r1 = mkRow();
+  const playBtn = mk('', async () => {
+    if (S.state === 'playing') await rpc('core.playback.pause');
+    else await rpc('core.playback.resume').catch(() => rpc('core.playback.play'));
+    setTimeout(paintPlay, 150);
+  });
+  const paintPlay = () => { playBtn.textContent = S.state === 'playing' ? '❚❚ Pause' : '▶ Play'; };
+  paintPlay();
+  r1.appendChild(playBtn);
+  r1.appendChild(mk('⏮ Prev', () => rpc('core.playback.previous')));
+  r1.appendChild(mk('⏭ Skip', () => rpc('core.playback.next')));
+  r1.appendChild(mk('⏹ Stop', () => rpc('core.playback.stop')));
+  bar.appendChild(r1);
+
+  // ── volume + housekeeping ──
+  const r2 = mkRow();
+  const volLabel = el('div', null, 'VOL —');
+  volLabel.style.cssText = `flex:.8;min-height:56px;display:flex;align-items:center;
+    justify-content:center;font-family:var(--typed);font-size:15px;font-weight:700;
+    color:var(--amber-hot);background:var(--night-3);border:1px solid var(--chrome-lo)`;
+  const showVol = async () => {
+    const v = await getVolume();
+    volLabel.textContent = v == null ? 'NO MIXER' : `VOL ${v}`;
+    return v;
+  };
+  const nudge = d => async () => {
+    const v = await getVolume();
+    if (v == null) { toast('No mixer configured', true); return; }
+    await rpc('core.mixer.set_volume', {volume: Math.max(0, Math.min(100, v + d))});
+    await showVol();
+  };
+  r2.appendChild(mk('VOL −', nudge(-5)));
+  r2.appendChild(volLabel);
+  r2.appendChild(mk('VOL +', nudge(+5)));
+  r2.appendChild(mk('Clear queue', async () => {
+    await rpc('core.playback.stop'); await rpc('core.tracklist.clear'); toast('Queue cleared'); }));
+  r2.appendChild(mk('+5 credits', async () => {
+    S.credits = Math.min(S.credits + 5, 99); renderCredits(); }));
+  r2.appendChild(mk('Close', async () => bar.remove(), .6));
+  bar.appendChild(r2);
+
+  document.body.appendChild(bar);
+  showVol();
+  // Keep the play/pause label honest if the track changes under us.
+  const sync = setInterval(() => {
+    if (!bar.isConnected) { clearInterval(sync); return; }
+    paintPlay();
+  }, 1000);
+}
+
+/* ── Attract ──────────────────────────────────────────────────────────── */
+function poke() { S.lastTouch = Date.now(); $('#attract').classList.remove('on'); }
+setInterval(() => {
+  if (phoneLayout()) return;            // attract belongs on the wall unit only
+  if ($('#status').classList.contains('on') || document.getElementById('admin')) return;
+  if (Date.now() - S.lastTouch < CFG.attractAfter) return;
+  if ($('#search').classList.contains('on')) closeSearch();
+  // Paper the attract screen with whatever art we already have cached.
+  const urls = [...S.art.values()].filter(Boolean).slice(0, 24);
+  const box = $('#attract-art'); box.innerHTML = '';
+  urls.forEach(u => { const d = el('div'); d.style.backgroundImage = `url("${u}")`; box.appendChild(d); });
+  $('#attract').classList.add('on');
+}, 4000);
+['pointerdown', 'keydown'].forEach(ev => document.addEventListener(ev, poke, {capture: true}));
+
+/* ── Live updates ─────────────────────────────────────────────────────── */
+function connectEvents() {
+  let ws;
+  try { ws = new WebSocket(`ws://${CFG.mopidy}/mopidy/ws`); }
+  catch { setTimeout(connectEvents, 4000); return; }
+  ws.onmessage = ev => {
+    let m; try { m = JSON.parse(ev.data); } catch { return; }
+    if (['track_playback_started', 'tracklist_changed', 'playback_state_changed',
+         'track_playback_ended'].includes(m.event)) refresh();
+    if (m.event === 'seeked') S.pos = m.time_position ?? S.pos;
+  };
+  ws.onclose = () => setTimeout(connectEvents, 4000);
+  ws.onerror = () => { try { ws.close(); } catch {} };
+}
+setInterval(() => {
+  if (S.state !== 'playing') return;
+  S.pos = Math.min(S.pos + 1000, S.len || Infinity);
+  $('#np-clock').textContent = `${fmt(S.pos)} / ${fmt(S.len)}`;
+  $('#bar').firstElementChild.style.width = S.len ? `${(S.pos / S.len) * 100}%` : '0';
+}, 1000);
+setInterval(async () => {
+  if (S.state !== 'playing') return;
+  try { S.pos = await rpc('core.playback.get_time_position'); } catch {}
+}, 10000);
+setInterval(() => { if (S.credits < CFG.maxCredits) { S.credits++; renderCredits(); } },
+  CFG.refillEvery);
+
+/* ── Wire up ──────────────────────────────────────────────────────────── */
+$('#search-btn').addEventListener('pointerdown', openSearch);
+$('#sclose').addEventListener('pointerdown', closeSearch);
+$('#clear').addEventListener('pointerdown', () => { S.query = ''; afterType(); });
+onTap($('#back'), navBack);
+onTap($('#dial'), openDial);
+
+/* Horizontal swipe pages the track list. The arrows are the primary control
+   -- an old resistive panel drops contacts and swipes are unreliable on it --
+   but on a phone this is the natural gesture. Swipe left for the next bank;
+   flip the sign below if you'd rather it went the other way. */
+(function () {
+  let sx = 0, sy = 0, live = false;
+  const c = $('#content');
+  c.addEventListener('pointerdown', e => { sx = e.clientX; sy = e.clientY; live = true; });
+  c.addEventListener('pointercancel', () => { live = false; });
+  c.addEventListener('pointerup', e => {
+    if (!live) return; live = false;
+    const dx = e.clientX - sx, dy = e.clientY - sy;
+    if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 2) pageBy(dx < 0 ? 1 : -1);
+  });
+})();
+
+// Native input on phones. 'input' covers typing, paste, dictation and autofill.
+$('#qinput').addEventListener('input', e => { S.query = e.target.value; afterType(); });
+$('#qinput').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); doSearch(); } });
+
+/* Credit rules live in mopidy.conf and are served by the extension, so they
+   can be changed without editing this file and every client agrees. Falls
+   back silently to the defaults above when the extension is not installed. */
+async function loadServerConfig() {
+  try {
+    const r = await fetch('/jukeboxapi/config.json', {cache: 'no-store'});
+    if (r.ok) {
+      Object.assign(CFG, await r.json());
+      S.credits = CFG.startCredits;
+    }
+  } catch { /* standalone: keep the built-in defaults */ }
+}
+
+/* Each step guarded: one failure must not leave the rest of the page
+   half-initialised (which is how the credit counter got stuck on 0). */
+const boot = [
+  ['title',    () => { $('#mq-title').textContent = CFG.title; }],
+  ['credits',  renderCredits],
+  ['keyboard', buildKeyboard],
+  ['state',    refresh],
+  ['rail',     loadRail],
+  ['events',   connectEvents],
+];
+loadServerConfig().then(() => {
+  boot.forEach(([name, fn]) => {
+    try { fn(); } catch (e) { console.error(`init:${name} failed`, e); }
+  });
+  setInterval(refresh, 15000);
+});
+</script>
+</body>
+</html>
