@@ -23,6 +23,8 @@ CONFIG = {
         "attract_seconds": 90,
         "page_size": 10,
         "title": "Basement Jukebox",
+        "theme": "oxblood",
+        "accent_color": "",
     }
 }
 
@@ -92,3 +94,60 @@ class TestApp(AsyncHTTPTestCase):
         # A stale config would silently give guests the wrong credit rules.
         r = self.fetch("/jukeboxapi/config.json")
         assert r.headers["Cache-Control"] == "no-store"
+
+
+# ── theming ───────────────────────────────────────────────────────────────
+from mopidy_jukebox.theme import DEFAULT, THEMES, _clean_hex, resolve  # noqa: E402
+
+PALETTE_KEYS = {"night","night2","night3","deep","deepLo","accent","accentHot",
+                "paper","paper2","ink","chrome","chromeLo"}
+
+
+def test_every_theme_defines_the_full_palette():
+    # A missing key means that CSS variable keeps the previous theme's value,
+    # which shows up as one stray colour rather than an obvious failure.
+    for name, pal in THEMES.items():
+        assert set(pal) == PALETTE_KEYS, f"{name} is missing {PALETTE_KEYS - set(pal)}"
+
+
+def test_every_theme_colour_is_a_hex_triplet():
+    import re
+    for name, pal in THEMES.items():
+        for key, value in pal.items():
+            assert re.fullmatch(r"#[0-9a-f]{6}", value), f"{name}.{key} = {value}"
+
+
+def test_unknown_theme_falls_back_to_the_default():
+    assert resolve("does-not-exist") == THEMES[DEFAULT]
+
+
+@pytest.mark.parametrize("raw,expected", [
+    ("#f0a830", "#f0a830"),
+    ("f0a830", "#f0a830"),
+    ("#FA3", "#ffaa33"),
+    ("fa3", "#ffaa33"),
+    ("banana", None),
+    ("", None),
+    (None, None),
+    ("#12345", None),
+])
+def test_clean_hex(raw, expected):
+    assert _clean_hex(raw) == expected
+
+
+def test_accent_override_also_derives_the_hot_variant():
+    pal = resolve("oxblood", "#00b4ff")
+    assert pal["accent"] == "#00b4ff"
+    assert pal["accentHot"] != pal["accent"]      # lighter, not identical
+    assert pal["night"] == THEMES["oxblood"]["night"]   # rest untouched
+
+
+def test_bad_accent_override_is_ignored():
+    assert resolve("oxblood", "banana")["accent"] == THEMES["oxblood"]["accent"]
+
+
+def test_config_json_carries_the_palette():
+    cfg = {"jukebox": dict(CONFIG["jukebox"], theme="diner", accent_color="")}
+    payload = app_factory(cfg, mock.Mock())[0][2]["cfg"]
+    assert payload["theme"] == "diner"
+    assert payload["palette"]["accent"] == THEMES["diner"]["accent"]

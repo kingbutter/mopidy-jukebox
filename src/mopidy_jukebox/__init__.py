@@ -43,6 +43,10 @@ class Extension(ext.Extension):
         schema["attract_seconds"] = config.Integer(minimum=5)
         schema["page_size"] = config.Integer(minimum=4, maximum=26)
         schema["title"] = config.String()
+        from .theme import THEMES
+        schema["theme"] = config.String(choices=sorted(THEMES))
+        # Blank means "use the theme's own accent". Any hex works.
+        schema["accent_color"] = config.String(optional=True)
         return schema
 
     def setup(self, registry):

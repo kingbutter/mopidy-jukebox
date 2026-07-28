@@ -1,6 +1,8 @@
+<img src="https://raw.githubusercontent.com/kingbutter/mopidy-jukebox/main/media/banner.jpg" alt="Mopidy-Jukebox">
+
 # Mopidy-Jukebox
 
-[![PyPI](https://img.shields.io/pypi/v/Mopidy-Jukebox)](https://pypi.org/project/Mopidy-Jukebox/)
+[![PyPI](https://img.shields.io/pypi/v/Mopidy-Jukebox?label=PyPI&color=e0a020)](https://pypi.org/project/Mopidy-Jukebox/)
 [![CI](https://github.com/kingbutter/mopidy-jukebox/actions/workflows/ci.yml/badge.svg)](https://github.com/kingbutter/mopidy-jukebox/actions)
 
 A [Mopidy](https://mopidy.com/) extension that turns a touchscreen into a
@@ -51,7 +53,24 @@ cost_per_song = 1
 attract_seconds = 90     # idle time before the attract screen
 page_size = 10           # rows per selection bank (A1..A10)
 title = Jukebox
+theme = oxblood          # oxblood | seeburg | diner | phosphor | mono
+accent_color =           # optional hex override, e.g. #00b4ff
 ```
+
+### Themes
+
+| Theme | Looks like |
+|---|---|
+| `oxblood` | Wurlitzer oxblood and marquee amber (default) |
+| `seeburg` | cool blue chrome, closer to a 1950s Seeburg |
+| `diner` | neon hot pink on near-black |
+| `phosphor` | green CRT, reads as equipment |
+| `mono` | no hue at all, pure appliance |
+
+`accent_color` overrides just the accent, keeping the rest of the chosen
+theme — set it to your cabinet's own colour. Any hex works (`#00b4ff`,
+`00b4ff`, `#0bf`); the lighter "hot" variant is derived automatically. All
+five themes are checked for text contrast in the test suite.
 
 Every client reads these from `/jukeboxapi/config.json`, so a change here
 applies to the wall unit and every phone at once.

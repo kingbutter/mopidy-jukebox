@@ -14,6 +14,8 @@ import json
 
 import tornado.web
 
+from .theme import resolve
+
 _PAGE = """<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -120,6 +122,10 @@ def app_factory(config, core):
         "attractAfter": c["attract_seconds"] * 1000,
         "pageSize": c["page_size"],
         "title": c["title"],
+        "theme": c["theme"],
+        # The palette itself, not just its name: the client should not have to
+        # carry a copy of the theme table.
+        "palette": resolve(c["theme"], c.get("accent_color")),
     }
     return [
         (r"/", IndexHandler, {"cfg": payload}),
